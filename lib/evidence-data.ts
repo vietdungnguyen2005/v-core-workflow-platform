@@ -1,4 +1,4 @@
-const repository = "https://github.com/vietdungnguyen2005/Project1";
+const repository = "https://github.com/vietdungnguyen2005/v-core-workflow-platform";
 
 export const evidenceItems = [
   {

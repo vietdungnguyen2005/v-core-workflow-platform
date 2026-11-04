@@ -1,152 +1,65 @@
-# V-Core
+# V-Core — Configurable Team Workflows
 
-## Synthetic customer workflow delivery
+A team workspace that adapts to different approval processes while keeping work limits, access permissions and project history intact.
 
-The feature branch adds workspace-scoped, immutable workflow template revisions for two **hypothetical** clients: software delivery (BACKLOG → IN_PROGRESS → REVIEW → DONE) and business operations (RECEIVED → VALIDATION → APPROVAL → COMPLETED). An administrator previews/publishes/selects a revision, provisions a project atomically, and uses the existing task commands through a customer workflow workbench. Omitting the template retains default project creation. Existing projects are never silently remapped.
+[Live demo](https://v-core-saas.pages.dev/) · [Evidence and screenshots](docs/fde/acceptance-tests.md) · [Technical design](docs/fde/solution-design.md) · [Run locally](docs/developer-guide.md)
 
-This is local portfolio implementation/testing evidence, not a real customer engagement or production deployment. Start with [discovery](docs/fde/client-discovery.md), [capability inventory and plan](docs/fde/requirements-matrix.md), [API/design](docs/fde/solution-design.md), [acceptance evidence](docs/fde/acceptance-tests.md), [handoff](docs/fde/deployment-handoff.md) and the [90-second demo/interview/CV wording](docs/fde/customer-demo-script.md). Run the real Worker/Java/DB acceptance after package/build with `pwsh -NoProfile -File tools/verify-operator-session.ps1`; it creates and removes disposable local containers. No platform keys or deployment are required.
+## Problem & Solution
 
-### Dependency audit policy (2026-10-18)
+**Problem:** A software team and an operations team do not move work through the same stages. Hard-coding one workflow forces teams to work around the tool; changing it later can unexpectedly alter projects already in progress. Unreliable connections and simultaneous edits can also create duplicate projects or overfill an approval queue.
 
-Run `npm run audit:dependencies`. Runtime dependencies retain a strict high/critical audit. The full audit uses `audit-ci.json` with one user-approved, exact advisory-and-lint-path exception for GHSA-vfj7-8cjw-p6xm (unpatched braces stack exhaustion), expiring at 00:00 Asia/Bangkok on 2026-11-18. This is accepted risk, not a vulnerability fix or a zero-findings claim. Lint only trusted repository configuration; do not feed untrusted root-directory glob patterns into the lint tool. All other high/critical findings and audit-service failures still block CI. Remove the exception when upstream is patched; do not renew automatically.
+**Solution:** V-Core lets an administrator publish a workflow version and use it when creating a project. Each project keeps its selected configuration. Teams can assign and move tasks through their own stages, with visible capacity limits and a recorded history of changes.
 
-V-Core is a portfolio-grade agile delivery workspace built to demonstrate backend and cloud engineering, not only UI implementation. A statically exported Next.js client runs on Cloudflare Pages, a thin Worker acts as a trusted backend-for-frontend (BFF), and a Java 21 Spring Boot modular monolith owns business data in PostgreSQL. Redis connectivity remains configured, but authorization no longer uses a Redis membership cache.
+Two fictional customer scenarios demonstrate the same application serving different needs:
 
-## Live demo
+- **Software delivery:** Backlog → In Progress → Review → Done.
+- **Business operations:** Received → Validation → Approval → Completed.
 
-- Application: [v-core-saas.pages.dev](https://v-core-saas.pages.dev)
-- Backend readiness: [v-core-api.onrender.com/actuator/health/readiness](https://v-core-api.onrender.com/actuator/health/readiness)
-- Public deployment proof: [docs/evidence/live-deployment.md](docs/evidence/live-deployment.md)
-- Short-lived AWS deployment proof: [docs/evidence/aws-deployment.md](docs/evidence/aws-deployment.md)
+<details>
+<summary>View the workflow and capacity-conflict screenshot</summary>
 
-The backend uses Render's free web-service tier, so the first request after 15 minutes without inbound traffic can take about a minute while the container wakes up.
+![Operations workflow with an approval-capacity conflict](docs/fde/evidence/client-b-wip-conflict.png)
 
-## What this repository proves
+</details>
 
-- Correct concurrent Kanban moves with PostgreSQL row locking, WIP limits, and optimistic versions.
-- Retry-safe create, rename, and move commands backed by durable idempotency records.
-- Tenant-scoped access control enforced by workspace membership and role.
-- Transactional audit and outbox records, with an SSE activity feed for the UI.
-- Observable Spring Boot runtime with health probes, Prometheus metrics, correlation IDs, and optional OpenTelemetry export.
-- Reproducible local delivery using Docker Compose and production-oriented Kubernetes manifests through Helm.
-- Automated frontend, backend, container, dependency, and Helm checks in GitHub Actions.
+## Engineering
 
-Architecture and trade-offs are documented in [docs/architecture.md](docs/architecture.md) and [docs/decisions](docs/decisions).
+The backend is designed around protecting business rules, not just displaying a board.
 
-## Stack
+- **Safe retries:** Repeating the same project-creation request returns the original result instead of creating another project.
+- **Controlled concurrent changes:** The database checks task versions and locks the relevant workflow capacity before accepting a move.
+- **Stable configuration:** Published workflow versions cannot be edited through the API. New versions do not silently change existing projects.
+- **Workspace boundaries:** Access is checked against the user's membership and role; knowing another workspace's ID does not grant access.
+- **Traceable delivery:** Project setup, workflow columns and the creation history are saved together—or rolled back together if setup fails.
 
-| Layer | Technology |
-| --- | --- |
-| Web | Next.js, React, strict TypeScript, Zustand, TanStack Query, Tailwind CSS |
-| Edge BFF | Cloudflare Pages Worker |
-| Backend | Java 21, Spring Boot 3.5, Spring Security, Spring Data JPA |
-| Data | PostgreSQL, Flyway, Redis |
-| Reliability | Idempotency keys, optimistic versions, row locks, transactional outbox |
-| Observability | Actuator, Prometheus, OpenTelemetry, request correlation |
-| Delivery | Docker, GitHub Actions, Helm, Kubernetes |
+**Core stack:** Java 21, Spring Boot, PostgreSQL, React/Next.js and TypeScript. Redis is configured as a supporting service; workspace authorization does not depend on a Redis membership cache. Docker and GitHub Actions support repeatable delivery.
 
-## Local full stack
+## Impact & Results
 
-Requirements: Node.js, Docker Desktop, and Java 21 when running Maven outside Docker.
+These are **observed business-state outcomes from synthetic local scenarios**, not customer adoption figures or unit-test counts. Recorded on 23 October 2026 with Java, a real PostgreSQL/Redis environment and browser-driven acceptance.
 
-Copy `.dev.vars.example` to `.dev.vars`. The default values are only for local development and already match `compose.yaml`.
+| Situation | Measured outcome | Why it matters |
+| --- | --- | --- |
+| Two teams need different processes | **2 distinct workflows**, each provisioning **1 project, 1 sprint and 4 correctly ordered columns** | Different processes run in one application without separate customer-specific codebases. |
+| A project is saved but its response is lost | Retrying the original request leaves **1 project and 1 creation-history event** | A lost acknowledgement does not duplicate the project or its setup. |
+| An approval stage has a capacity of 1 | A second task is refused while occupancy stays at **1**; it can enter after the first task completes | Work cannot silently exceed the configured approval limit. |
+| A workflow receives a new version | Existing project limit remains **2**, while the new template version specifies **9** | Publishing a new configuration does not rewrite an existing project's operating rules. |
 
-If PostgreSQL or Redis already uses the default host ports, set `VCORE_POSTGRES_PORT` and `VCORE_REDIS_PORT` before starting Compose and use the same ports in the backend URLs.
+**Evidence:** [Recorded acceptance outcomes](docs/fde/acceptance-tests.md), especially AC-06, AC-07 and AC-11–13; [reproducible browser scenario](tools/qa_customer_workflow.py). These demonstrate correct setup and recovery, **not** a measured reduction in staff hours or a production reliability percentage.
 
-```powershell
-npm ci
-docker compose --profile app up -d --build
-npm run build
-npx wrangler pages dev out --port 8788
-```
+## Explore the project
 
-Open `http://localhost:8788`. The BFF forwards allowlisted `/api/*` routes and session cookies to Spring Boot; it does **not** create user identity from email headers. Direct backend documentation is available at `http://localhost:8080/swagger-ui.html` while the Compose profile is running.
+- **For a quick walkthrough:** [Customer scenario and demo script](docs/fde/customer-demo-script.md).
+- **For engineering detail:** [Architecture](docs/architecture.md) · [Design and trade-offs](docs/fde/solution-design.md).
+- **For setup and verification:** [Developer guide](docs/developer-guide.md).
+- **For operational limits:** [Deployment and support handoff](docs/fde/deployment-handoff.md).
 
-### Workspace authentication (local remediation)
+### Demo boundaries
 
-The public demo is read-only, using a dedicated VIEWER identity only when the backend explicitly enables `VCORE_DEMO_READ_ENABLED=true` (Compose enables it). Without that flag, anonymous workspace access is denied. `DEMO_USER_EMAIL` and `Cf-Access-Authenticated-User-Email` do not authenticate users.
+This is a personal portfolio project; the customer scenarios are fictional. The demo uses Cloudflare for the frontend and Render for the Java backend, with Neon PostgreSQL and Upstash Redis. Free-host startup can delay the first request. Editing requires a deliberately provisioned operator account; credentials are not published.
 
-Flyway V6 adds PostgreSQL account/session tables and a separate demo viewer; older migrations are unchanged. Configure `AUTH_BOOTSTRAP_USERNAME` (an existing non-demo `app_user.email`) and `AUTH_BOOTSTRAP_PASSWORD_HASH` (BCrypt) in the backend environment before initial provisioning. There is no default password or automatic OWNER assignment. Workspace membership still determines which tenant and operations the authenticated account can access. An account with application role OPERATOR is eligible to write, but cannot bypass its workspace role.
+The results above come from controlled local exercises, not live production traffic. The project does not claim real customer deployments, automatic migration of active workflows or exactly-once operation delivery.
 
-Both bootstrap variables blank means no account is provisioned; existing accounts are not overwritten. There is no public signup/password recovery UI. Spring Boot does not load Next.js `.env.local` automatically.
+---
 
-Session cookies are HttpOnly/SameSite=Lax/Secure with a 15-minute idle timeout. `AUTH_SECURE_COOKIE=false` is allowed only for local HTTP (Compose sets it); production must use HTTPS. Disable `auth_account.enabled` to revoke the next request; membership is read from PostgreSQL for every read/write/admin authorization rather than Redis. Login has a shared PostgreSQL budget of 10 attempts/minute/backend peer address; behind the BFF this is not a per-end-user-IP limiter.
-
-The UI keeps search/read access available but disables write controls for public readers. Sign-in/sign-out reload the page to discard the previous identity's query/form state. All mutations fetch a current CSRF token; the Java service also enforces the session, role and CSRF.
-
-Real local browser smoke (run backend verify and frontend build first; do not rebuild while the JAR is running):
-
-```powershell
-pwsh -NoProfile -File tools/verify-operator-session.ps1
-```
-
-This starts a real local Pages Worker, the packaged Java API and disposable PostgreSQL/Redis. It does not use production credentials/data. See [remediation evidence](docs/evidence/remediation-2026-10-18.md). These changes are local and not yet rolled out to the live links above.
-
-Active SSE subscriptions now check current membership, account availability and the original session's expiry before each event and heartbeat. Invalid access or an authorization-storage failure closes and unregisters the stream. A heartbeat does not extend session idle time. Idle revalidation uses a 15-second default interval (`vcore.sse.heartbeat-interval`); this is not a hard wall-clock SLA under slow DB/network conditions. A change committed after an authorization check cannot retroactively withdraw bytes already being sent.
-
-The real smoke also keeps a separate SSE HTTP connection open while the browser logs out, then verifies EOF. Its local heartbeat interval is reduced to 250 ms for this check; production defaults are unchanged.
-
-To stop the stack without deleting database volumes:
-
-```powershell
-docker compose --profile app down
-```
-
-## Verification
-
-Frontend:
-
-```powershell
-npm run verify
-```
-
-Backend integration tests use Testcontainers with real PostgreSQL and Redis instances:
-
-```powershell
-cd backend
-.\mvnw.cmd verify
-```
-
-Infrastructure:
-
-```powershell
-helm lint infra/helm/v-core
-helm template v-core infra/helm/v-core
-docker build -t v-core-backend:local backend
-```
-
-## Runtime configuration
-
-No secret belongs in Git. `.env.example` documents deployment variables; `.dev.vars.example` documents the local Cloudflare BFF contract.
-
-The two shared-secret values must match:
-
-- Cloudflare Worker: `BFF_SHARED_SECRET`
-- Spring Boot: `VCORE_BFF_SHARED_SECRET`
-
-Production data services use `DATABASE_URL`/PostgreSQL credentials and `REDIS_URL`. Grafana Cloud/OpenTelemetry and Google Cloud placeholders are optional until those accounts are connected.
-
-## Deployment model
-
-The long-lived free demo is split by runtime, not by repository:
-
-1. Cloudflare Pages serves the static frontend and its BFF Worker.
-2. A container platform hosts the Spring Boot image.
-3. Neon provides PostgreSQL and Upstash provides Redis.
-
-The live demo uses this split with `BACKEND_ORIGIN` and matching BFF secrets configured in provider secret stores. The same backend image has also been verified on ECS with managed RDS and Redis through the repository's Terraform stack; AWS remains short-lived evidence rather than a duplicate project.
-
-## Repository map
-
-```text
-app, components, hooks, lib, store  Next.js application
-public/_worker.js                   Cloudflare BFF
-backend                            Spring Boot modular monolith
-infra/helm/v-core                  Kubernetes deployment proof
-docs                               scope, architecture, ADRs
-tests                              Vitest and Playwright tests
-```
-
-## Current scope boundary
-
-The completed portfolio scope covers session resolution; task listing, creation, rename, movement, assignment and comments; project plus active-sprint provisioning; workflow WIP administration; workspace invitations; conflict handling; audit history; live invalidation; and recruiter-facing evidence. Billing, file uploads, invitation email delivery, chat, and notification delivery are deliberately outside scope; see [docs/product-scope.md](docs/product-scope.md).
+Former repository name: `Project1`. The new name changes the repository address, not the live-demo URL.
