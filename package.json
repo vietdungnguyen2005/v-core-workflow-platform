@@ -25,7 +25,7 @@
     "@tanstack/react-query-devtools": "^5.101.4",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.26.0",
-    "next": "16.4.2",
+    "next": "16.4.5",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "zustand": "^5.0.14"
@@ -38,7 +38,7 @@
     "@types/react": "^19.2.8",
     "@types/react-dom": "^19.2.3",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.4.2",
+    "eslint-config-next": "16.4.5",
     "jsdom": "^29.1.1",
     "lighthouse": "^13.4.1",
     "serve": "^14.2.6",
@@ -46,7 +46,7 @@
     "tsx": "^4.23.1",
     "typescript": "^6.0.3",
     "vitest": "4.1.12",
-    "wrangler": "4.151.1"
+    "wrangler": "4.158.0"
   },
   "overrides": {
     "postcss": "8.5.26",

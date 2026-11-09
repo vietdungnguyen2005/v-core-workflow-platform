@@ -26,3 +26,9 @@ __pycache__/
 crash.log
 .idea
 *.iml
+coverage/
+*.log
+*.tfvars
+*.tfvars.json
+/interview-study/
+/PROJECT_DEEP_DIVE_PREP.md

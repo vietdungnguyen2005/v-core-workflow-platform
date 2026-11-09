@@ -82,7 +82,12 @@ test("mobile users can create and move tasks without native drag", async ({ page
 
   await expect(page.getByRole("button", { name: "Mobile production handoff" })).toHaveCount(1);
   expect(createCommandCount).toBe(1);
-  await page.getByLabel("Move task Mobile production handoff").selectOption("done");
+  // Optimistic creation replaces the temporary card. AnimatePresence can retain
+  // its exiting controls briefly, so wait for reconciliation before interacting.
+  const moveControl = page.getByRole("combobox", { name: "Move task Mobile production handoff", exact: true });
+  await expect(moveControl).toHaveCount(1);
+  await expect(moveControl).toBeEnabled();
+  await moveControl.selectOption("done");
   await expect(
     page.getByRole("article", { name: "Done column" }).getByRole("button", { name: "Mobile production handoff" })
   ).toBeVisible();
